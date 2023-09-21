@@ -1,0 +1,44 @@
+async function pageFunction(context) {
+    const { page, request, log } = context;
+
+    // Wait for the page to load by waiting for the presence of the .p-url element
+    try {
+        await page.waitForSelector('.p-url', { timeout: 5000 });
+    } catch (error) {
+        log.error(`Timeout waiting for .p-url element on ${request.url}`);
+        return null;
+    }
+
+    // Get the URLs
+    const urls = await page.$$eval('.p-url', (elements) =>
+        elements.map((element) => element.href)
+    );
+
+    const scrapedData = [];
+
+    for (const url of urls) {
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
+
+        // Wait for the .fw-headline element on the individual post page
+        try {
+            await page.waitForSelector('.fw-headline', { timeout: 5000 });
+        } catch (error) {
+            log.error(`Timeout waiting for .fw-headline element on ${url}`);
+            continue; // Skip this URL and move to the next if the title is not found
+        }
+
+        // Scrape the title
+        const title = await page.$eval('.fw-headline', (element) => element.textContent);
+
+        // Scrape the HTML content within .is-highlight-shares
+        const htmlContent = await page.$eval('.is-highlight-shares', (element) => element.innerHTML);
+
+        // Scrape the post date
+        const postDate = await page.$eval('.published', (element) => element.textContent);
+
+        scrapedData.push({ url, title, htmlContent, postDate });
+    }
+
+    log.info(`Scraped ${scrapedData.length} posts from ${request.url}`);
+    return scrapedData;
+}
